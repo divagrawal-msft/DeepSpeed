@@ -2393,7 +2393,7 @@ class DeepSpeedEngine(Module):
         for buf, synced in zip(small_bucket, self.unflatten(allreduced, small_bucket)):
             buf.copy_(synced)
 
-     def allreduce_no_retain(self, bucket, numel_per_bucket=MEMORY_OPT_ALLREDUCE_SIZE):
+    def allreduce_no_retain(self, bucket, dp_group, numel_per_bucket=MEMORY_OPT_ALLREDUCE_SIZE):
         small_bucket = []
         numel = 0
         for tensor in bucket:
@@ -2436,7 +2436,7 @@ class DeepSpeedEngine(Module):
 
         return non_expert_grads, expert_grads
 
-    def buffered_allreduce_fallback(self, grads=None, elements_per_buffer=MEMORY_OPT_ALLREDUCE_SIZE):
+    def _reduce_non_expert_gradients(self, grads, elements_per_buffer):
         split_buckets = split_half_float_double_sparse(grads)
         for _, bucket_tuple in enumerate(split_buckets):
             bucket_type, bucket = bucket_tuple
@@ -2469,7 +2469,7 @@ class DeepSpeedEngine(Module):
                         dp_group=groups._get_expert_data_parallel_group(ep_name),
                         numel_per_bucket=elements_per_buffer)
 
-    def buffered_allreduce_fallback(self, grads=None, elements_per_buffer=500000000):
+    def buffered_allreduce_fallback(self, grads=None, elements_per_buffer=MEMORY_OPT_ALLREDUCE_SIZE):
         if grads is None:
             non_expert_grads, expert_grads = self._get_gradients_for_reduction()
         else:

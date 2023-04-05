@@ -17,6 +17,8 @@ from .module import PipelineModule, PipelineError
 from . import p2p
 from . import schedule
 
+import os
+
 TARGET_ID = -2
 LOG_STAGE = -2
 DATA_PARALLEL_ID = -2
