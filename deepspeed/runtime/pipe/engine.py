@@ -124,6 +124,15 @@ class PipelineEngine(DeepSpeedEngine):
         self.is_pipe_partitioned = self.is_model_parallel
         self.is_grad_partitioned = self.is_model_parallel
 
+        self._singularity_elasticity_enabled = False
+        try:
+            from torch._utils import _get_singularity_elasticity_flag
+            self._singularity_elasticity_enabled = _get_singularity_elasticity_flag()
+        except:
+            print(f'AISC_CTR:ERROR|DeepSpeed|Cannot find singularity pytorch function(s). DeepSpeed related patches will be disabled')
+
+        self._disable_loss_aggregation = os.environ.get('DEEPSPEED_DISABLE_LOSS_AGGREGATION', "false").lower() == "true"
+
         model_parameters = filter(lambda p: p.requires_grad, self.module.parameters())
         num_params = sum([p.numel() for p in model_parameters])
         unique_params = num_params
@@ -377,6 +386,8 @@ class PipelineEngine(DeepSpeedEngine):
         # TODO: should return precisely what loss returned and allow others to be queried?
         return self.agg_train_loss
 
+    # This method invokes allreduce(s) along the data parallel dimension
+    # which can slow down elastic training
     def eval_batch(self,
                    data_iter,
                    return_logits=False,
@@ -545,8 +556,10 @@ class PipelineEngine(DeepSpeedEngine):
             agg_loss = self.dp_group_loss.clone().detach()
             #print(f'RANK={self.global_rank} bcast SENDER src={self.global_rank} group={self.grid.pp_group}', flush=True)
             if self.is_data_parallel:
-                dist.all_reduce(agg_loss, group=self.mpu.get_data_parallel_group())
-                agg_loss /= self.dp_world_size
+
+                if not (self._singularity_elasticity_enabled or self._disable_loss_aggregation):
+                    dist.all_reduce(agg_loss, group=self.mpu.get_data_parallel_group())
+                    agg_loss /= self.dp_world_size
 
             assert self.global_rank in self.grid.pp_group
             losses = torch.Tensor([self.dp_group_loss, agg_loss]).to(self.device)

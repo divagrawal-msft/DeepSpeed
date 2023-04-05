@@ -98,6 +98,13 @@ from deepspeed.inference.config import DtypeEnum
 dist = None
 
 MEMORY_OPT_ALLREDUCE_SIZE = 500000000
+try:
+    from torch._utils import _get_singularity_elasticity_flag
+    if _get_singularity_elasticity_flag():
+        MEMORY_OPT_ALLREDUCE_SIZE = 4000000000
+except:
+    print(f'AISC_CTR:ERROR|DeepSpeed|Cannot find singularity pytorch function(s). DeepSpeed related patches will be disabled')
+
 
 DeepSpeedOptimizerCallable = \
     Callable[[Union[Iterable[Parameter], Dict[str, Iterable]]], Optimizer]
@@ -2386,7 +2393,7 @@ class DeepSpeedEngine(Module):
         for buf, synced in zip(small_bucket, self.unflatten(allreduced, small_bucket)):
             buf.copy_(synced)
 
-    def allreduce_no_retain(self, bucket, dp_group, numel_per_bucket=500000000):
+     def allreduce_no_retain(self, bucket, numel_per_bucket=MEMORY_OPT_ALLREDUCE_SIZE):
         small_bucket = []
         numel = 0
         for tensor in bucket:
@@ -2429,7 +2436,7 @@ class DeepSpeedEngine(Module):
 
         return non_expert_grads, expert_grads
 
-    def _reduce_non_expert_gradients(self, grads, elements_per_buffer):
+    def buffered_allreduce_fallback(self, grads=None, elements_per_buffer=MEMORY_OPT_ALLREDUCE_SIZE):
         split_buckets = split_half_float_double_sparse(grads)
         for _, bucket_tuple in enumerate(split_buckets):
             bucket_type, bucket = bucket_tuple
