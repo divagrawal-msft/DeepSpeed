@@ -23,6 +23,8 @@ TARGET_ID = -2
 LOG_STAGE = -2
 DATA_PARALLEL_ID = -2
 
+import time
+
 
 def is_even(number):
     return number % 2 == 0
@@ -643,6 +645,7 @@ class PipelineEngine(DeepSpeedEngine):
         return batch
 
     def _exec_forward_pass(self, buffer_id):
+        stt = time.time()
         self.tput_timer.start()
         self.mem_status('BEFORE FWD', reset_max=True)
 
@@ -721,18 +724,22 @@ class PipelineEngine(DeepSpeedEngine):
                     self.total_loss = [torch.zeros_like(l) for l in self.loss]
                 for idx, l in enumerate(self.loss):
                     self.total_loss[idx] += l.detach()
+                    
+        print("Time in forward pass: ", time.time() - stt, flush=True)
 
     def _exec_backward_pass(self, buffer_id):
         assert self.optimizer is not None, "must provide optimizer during " \
                                            "init in order to use backward"
 
         self.mem_status('BEFORE BWD', reset_max=True)
+        stt = time.time()
 
         # The last stage just runs backward on the loss using DeepSpeed's typical
         # mechanisms.
         if self.is_last_stage():
             super().backward(self.loss)
             self.mem_status('AFTER BWD')
+            print("Time in backward pass: ", time.time() - stt, flush=True)
             return
 
         outputs = self.pipe_buffers['outputs'][buffer_id]
@@ -797,6 +804,7 @@ class PipelineEngine(DeepSpeedEngine):
             self.timers('backward_microstep').stop()
 
         self.mem_status('AFTER BWD')
+        print("Time in backward pass: ", time.time() - stt, flush=True)
 
     def _exec_load_micro_batch(self, buffer_id):
         if self.wall_clock_breakdown():
@@ -1171,6 +1179,8 @@ class PipelineEngine(DeepSpeedEngine):
             self.timers('step').start()
         self.mem_status('BEFORE STEP', reset_max=True)
 
+        stt = time.time()
+
         self._force_grad_boundary = True
         self._take_model_step(lr_kwargs)
         self._force_grad_boundary = False
@@ -1208,6 +1218,8 @@ class PipelineEngine(DeepSpeedEngine):
                     'backward_allreduce',
                     'step'
                 ])
+                
+        print("Time in optimizer step: ", time.time() - stt)
 
     def _zero_grads(self, inputs):
         if isinstance(inputs, torch.Tensor):
