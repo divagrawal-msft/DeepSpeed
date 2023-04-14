@@ -725,7 +725,7 @@ class PipelineEngine(DeepSpeedEngine):
                 for idx, l in enumerate(self.loss):
                     self.total_loss[idx] += l.detach()
                     
-        print("Time in forward pass: ", time.time() - stt, flush=True)
+        print(dist.get_rank(), "Time in forward pass: ", time.time() - stt, flush=True)
 
     def _exec_backward_pass(self, buffer_id):
         assert self.optimizer is not None, "must provide optimizer during " \
@@ -739,7 +739,7 @@ class PipelineEngine(DeepSpeedEngine):
         if self.is_last_stage():
             super().backward(self.loss)
             self.mem_status('AFTER BWD')
-            print("Time in backward pass: ", time.time() - stt, flush=True)
+            print(dist.get_rank(), "Time in backward pass: ", time.time() - stt, flush=True)
             return
 
         outputs = self.pipe_buffers['outputs'][buffer_id]
@@ -804,7 +804,7 @@ class PipelineEngine(DeepSpeedEngine):
             self.timers('backward_microstep').stop()
 
         self.mem_status('AFTER BWD')
-        print("Time in backward pass: ", time.time() - stt, flush=True)
+        print(dist.get_rank(), "Time in backward pass: ", time.time() - stt, flush=True)
 
     def _exec_load_micro_batch(self, buffer_id):
         if self.wall_clock_breakdown():
@@ -1219,7 +1219,7 @@ class PipelineEngine(DeepSpeedEngine):
                     'step'
                 ])
                 
-        print("Time in optimizer step: ", time.time() - stt)
+        print(dist.get_rank(), "Time in optimizer step: ", time.time() - stt)
 
     def _zero_grads(self, inputs):
         if isinstance(inputs, torch.Tensor):
